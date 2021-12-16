@@ -30,13 +30,15 @@ static network net;
 static image in_s ;
 static image det_s;
 
-static cap_cv *cap;
+static cap_cv *cap1;
+static cap_cv *cap2;
 static float fps = 0;
 static float demo_thresh = 0;
 static int demo_ext_output = 0;
 static long long int frame_id = 0;
 static int demo_json_port = -1;
-static bool demo_skip_frame = false;
+static bool demo_skip_frame1 = false;
+static bool demo_skip_frame2 = false;
 
 
 static int avg_frames;
@@ -60,15 +62,29 @@ void *fetch_in_thread(void *ptr)
     while (!custom_atomic_load_int(&flag_exit)) {
         while (!custom_atomic_load_int(&run_fetch_in_thread)) {
             if (custom_atomic_load_int(&flag_exit)) return 0;
-            if (demo_skip_frame)
-                consume_frame(cap);
+            if (demo_skip_frame1)
+                consume_frame(cap1);
+            if (demo_skip_frame2)
+                consume_frame(cap2);
             this_thread_yield();
         }
         int dont_close_stream = 0;    // set 1 if your IP-camera periodically turns off and turns on video-stream
         if (letter_box)
-            in_s = get_image_from_stream_letterbox(cap, net.w, net.h, net.c, &in_img, dont_close_stream);
+            in_s = get_image_from_stream_letterbox(cap1, net.w, net.h, net.c, &in_img, dont_close_stream);
         else
-            in_s = get_image_from_stream_resize(cap, net.w, net.h, net.c, &in_img, dont_close_stream);
+            in_s = get_image_from_stream_resize(cap1, net.w, net.h, net.c, &in_img, dont_close_stream);
+        if (!in_s.data) {
+            printf("Stream closed.\n");
+            custom_atomic_store_int(&flag_exit, 1);
+            custom_atomic_store_int(&run_fetch_in_thread, 0);
+            //exit(EXIT_FAILURE);
+            return 0;
+        }
+
+        if (letter_box)
+            in_s = get_image_from_stream_letterbox(cap2, net.w, net.h, net.c, &in_img, dont_close_stream);
+        else
+            in_s = get_image_from_stream_resize(cap2, net.w, net.h, net.c, &in_img, dont_close_stream);
         if (!in_s.data) {
             printf("Stream closed.\n");
             custom_atomic_store_int(&flag_exit, 1);
@@ -140,7 +156,7 @@ double get_wall_time()
     return (double)walltime.tv_sec + (double)walltime.tv_usec * .000001;
 }
 
-void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int cam_index, const char *filename, char **names, int classes, int avgframes,
+void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int cam_index1, int cam_index2, const char *filename, char **names, int classes, int avgframes,
     int frame_skip, char *prefix, char *out_filename, int mjpeg_port, int dontdraw_bbox, int json_port, int dont_show, int ext_output, int letter_box_in, int time_limit_sec, char *http_post_host,
     int benchmark, int benchmark_layers)
 {
@@ -170,20 +186,25 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
 
     if(filename){
         printf("video file: %s\n", filename);
-        cap = get_capture_video_stream(filename);
-        demo_skip_frame = is_live_stream(filename);
-    }else{
-        printf("Webcam index: %d\n", cam_index);
-        cap = get_capture_webcam(cam_index);
-        demo_skip_frame = true;
+        cap1 = get_capture_video_stream(filename);
+        demo_skip_frame1 = is_live_stream(filename);
+    }else{             
+        printf("Webcam index: %d\n", cam_index1);
+        cap1 = get_capture_webcam(cam_index1);
+        cap2 = get_capture_webcam(cam_index2);
+        demo_skip_frame2 = true;
     }
 
-    if (!cap) {
+    if (!cap1 && !cap2) {
 #ifdef WIN32
         printf("Check that you have copied file opencv_ffmpeg340_64.dll to the same directory where is darknet.exe \n");
 #endif
-        error("Couldn't connect to webcam.", DARKNET_LOC);
+        error("Couldn't connect to webcam1", DARKNET_LOC);
+    } if (!cap2) {
+        error("Couldn't connect to webcam2", DARKNET_LOC);
     }
+
+    // 21.12.16 : don't understand where consume frame
 
     layer l = net.layers[net.n-1];
     int j;
