@@ -204,8 +204,6 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
         error("Couldn't connect to webcam2", DARKNET_LOC);
     }
 
-    // 21.12.16 : don't understand where consume frame
-
     layer l = net.layers[net.n-1];
     int j;
 
@@ -258,12 +256,12 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
 
 
     write_cv* output_video_writer = NULL;
-    if (out_filename && !flag_exit)
+    if (cap1 && out_filename && !flag_exit)
     {
         int src_fps = 25;
-        src_fps = get_stream_fps_cpp_cv(cap);
+        src_fps = get_stream_fps_cpp_cv(cap1);
         output_video_writer =
-            create_video_writer(out_filename, 'D', 'I', 'V', 'X', src_fps, get_width_mat(det_img), get_height_mat(det_img), 1);
+            create_video_writer(out_filename, '_1' , '1', 'D', 'I', 'V', 'X', src_fps, get_width_mat(det_img), get_height_mat(det_img), 1);
 
         //'H', '2', '6', '4'
         //'D', 'I', 'V', 'X'
@@ -273,6 +271,24 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
         //'X', 'V', 'I', 'D'
         //'W', 'M', 'V', '2'
     }
+
+    if (cap2 && out_filename && !flag_exit)
+    {
+        int src_fps = 25;
+        src_fps = get_stream_fps_cpp_cv(cap2);
+        output_video_writer =
+            create_video_writer(out_filename, '_2', 'D', 'I', 'V', 'X', src_fps, get_width_mat(det_img), get_height_mat(det_img), 1);
+
+        //'H', '2', '6', '4'
+        //'D', 'I', 'V', 'X'
+        //'M', 'J', 'P', 'G'
+        //'M', 'P', '4', 'V'
+        //'M', 'P', '4', '2'
+        //'X', 'V', 'I', 'D'
+        //'W', 'M', 'V', '2'
+    }
+
+    // TODO: ~21.12.16
 
     int send_http_post_once = 0;
     const double start_time_lim = get_time_point();
