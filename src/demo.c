@@ -24,11 +24,14 @@ static image **demo_alphabet;
 static int demo_classes;
 
 static int nboxes = 0;
-static detection *dets = NULL;
+static detection *dets1 = NULL;
+static detection *dets2 = NULL;
 
 static network net;
-static image in_s ;
-static image det_s;
+static image in_s1;
+static image in_s2;
+static image det_s1;
+static image det_s2;
 
 static cap_cv *cap1;
 static cap_cv *cap2;
@@ -43,11 +46,15 @@ static bool demo_skip_frame2 = false;
 
 static int avg_frames;
 static int demo_index = 0;
-static mat_cv** cv_images;
+static mat_cv** cv_images1;
+static mat_cv** cv_images2;
 
-mat_cv* in_img;
-mat_cv* det_img;
-mat_cv* show_img;
+mat_cv* in_img1;
+mat_cv* in_img2;
+mat_cv* det_img1;
+mat_cv* det_img2;
+mat_cv* show_img1;
+mat_cv* show_img2;
 
 static volatile int flag_exit;
 static int letter_box = 0;
@@ -70,10 +77,10 @@ void *fetch_in_thread(void *ptr)
         }
         int dont_close_stream = 0;    // set 1 if your IP-camera periodically turns off and turns on video-stream
         if (letter_box)
-            in_s = get_image_from_stream_letterbox(cap1, net.w, net.h, net.c, &in_img, dont_close_stream);
+            in_s1 = get_image_from_stream_letterbox(cap1, net.w, net.h, net.c, &in_img1, dont_close_stream);
         else
-            in_s = get_image_from_stream_resize(cap1, net.w, net.h, net.c, &in_img, dont_close_stream);
-        if (!in_s.data) {
+            in_s1 = get_image_from_stream_resize(cap1, net.w, net.h, net.c, &in_img1, dont_close_stream);
+        if (!in_s1.data) {
             printf("Stream closed.\n");
             custom_atomic_store_int(&flag_exit, 1);
             custom_atomic_store_int(&run_fetch_in_thread, 0);
@@ -82,10 +89,10 @@ void *fetch_in_thread(void *ptr)
         }
 
         if (letter_box)
-            in_s = get_image_from_stream_letterbox(cap2, net.w, net.h, net.c, &in_img, dont_close_stream);
+            in_s2 = get_image_from_stream_letterbox(cap2, net.w, net.h, net.c, &in_img2, dont_close_stream);
         else
-            in_s = get_image_from_stream_resize(cap2, net.w, net.h, net.c, &in_img, dont_close_stream);
-        if (!in_s.data) {
+            in_s2 = get_image_from_stream_resize(cap2, net.w, net.h, net.c, &in_img2, dont_close_stream);
+        if (!in_s2.data) {
             printf("Stream closed.\n");
             custom_atomic_store_int(&flag_exit, 1);
             custom_atomic_store_int(&run_fetch_in_thread, 0);
@@ -108,6 +115,7 @@ void *fetch_in_thread_sync(void *ptr)
 
 void *detect_in_thread(void *ptr)
 {
+    // TODO: ~21.12.18, Maybe seperate dets1 & dets2
     while (!custom_atomic_load_int(&flag_exit)) {
         while (!custom_atomic_load_int(&run_detect_in_thread)) {
             if (custom_atomic_load_int(&flag_exit)) return 0;
@@ -115,18 +123,25 @@ void *detect_in_thread(void *ptr)
         }
 
         layer l = net.layers[net.n - 1];
-        float *X = det_s.data;
+        float *X1 = det_s1.data;
+        float *X2 = det_s1.data;
         //float *prediction =
-        network_predict(net, X);
+        network_predict(net, X1);
+        network_predict(net, X2);
 
-        cv_images[demo_index] = det_img;
-        det_img = cv_images[(demo_index + avg_frames / 2 + 1) % avg_frames];
-        demo_index = (demo_index + 1) % avg_frames;
+        cv_images1[demo_index1] = det_img1;
+        cv_images2[demo_index2] = det_img2;
+        det_img1 = cv_images1[(demo_index1 + avg_frames / 2 + 1) % avg_frames];
+        det_img2 = cv_images2[(demo_index2 + avg_frames / 2 + 1) % avg_frames];
+        demo_index1 = (demo_index1 + 1) % avg_frames;
+        demo_index2 = (demo_index2 + 1) % avg_frames;
 
         if (letter_box)
-            dets = get_network_boxes(&net, get_width_mat(in_img), get_height_mat(in_img), demo_thresh, demo_thresh, 0, 1, &nboxes, 1); // letter box
+            dets1 = get_network_boxes(&net, get_width_mat(in_img1), get_height_mat(in_img1), demo_thresh, demo_thresh, 0, 1, &nboxes, 1); // letter box
+            dets2 = get_network_boxes(&net, get_width_mat(in_img2), get_height_mat(in_img2), demo_thresh, demo_thresh, 0, 1, &nboxes, 1); // letter box
         else
-            dets = get_network_boxes(&net, net.w, net.h, demo_thresh, demo_thresh, 0, 1, &nboxes, 0); // resized
+            dets1 = get_network_boxes(&net, net.w, net.h, demo_thresh, demo_thresh, 0, 1, &nboxes, 0); // resized
+            dets2 = get_network_boxes(&net, net.w, net.h, demo_thresh, demo_thresh, 0, 1, &nboxes, 0); // resized
 
         //const float nms = .45;
         //if (nms) {
@@ -163,7 +178,8 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     if (avgframes < 1) avgframes = 1;
     avg_frames = avgframes;
     letter_box = letter_box_in;
-    in_img = det_img = show_img = NULL;
+    in_img1 = det_img1 = show_img1 = NULL;
+    in_img2 = det_img2 = show_img2 = NULL;
     //skip = frame_skip;
     image **alphabet = load_alphabet();
     int delay = frame_skip;
@@ -195,7 +211,7 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
         demo_skip_frame2 = true;
     }
 
-    if (!cap1 && !cap2) {
+    if (!cap1) {
 #ifdef WIN32
         printf("Check that you have copied file opencv_ffmpeg340_64.dll to the same directory where is darknet.exe \n");
 #endif
@@ -232,20 +248,26 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     if (custom_create_thread(&detect_thread, 0, detect_in_thread, 0)) error("Thread creation failed", DARKNET_LOC);
 
     fetch_in_thread_sync(0); //fetch_in_thread(0);
-    det_img = in_img;
-    det_s = in_s;
+    det_img1 = in_img1;
+    det_img2 = in_img2;
+    det_s1 = in_s1;
+    det_s2 = in_s2;
 
     fetch_in_thread_sync(0); //fetch_in_thread(0);
     detect_in_thread_sync(0); //fetch_in_thread(0);
-    det_img = in_img;
-    det_s = in_s;
+    det_img1 = in_img1;
+    det_img2 = in_img2;
+    det_s1 = in_s1;
+    det_s2 = in_s2;
 
     for (j = 0; j < avg_frames / 2; ++j) {
         free_detections(dets, nboxes);
         fetch_in_thread_sync(0); //fetch_in_thread(0);
         detect_in_thread_sync(0); //fetch_in_thread(0);
-        det_img = in_img;
-        det_s = in_s;
+        det_img1 = in_img1;
+        det_img2 = in_img2;
+        det_s1 = in_s1;
+        det_s2 = in_s2;
     }
 
     int count = 0;
@@ -255,13 +277,14 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     }
 
 
-    write_cv* output_video_writer = NULL;
+    write_cv* output_video_writer1 = NULL;
+    write_cv* output_video_writer2 = NULL;
     if (cap1 && out_filename && !flag_exit)
     {
         int src_fps = 25;
         src_fps = get_stream_fps_cpp_cv(cap1);
-        output_video_writer =
-            create_video_writer(out_filename, '_1' , '1', 'D', 'I', 'V', 'X', src_fps, get_width_mat(det_img), get_height_mat(det_img), 1);
+        output_video_writer1 =
+            create_video_writer(out_filename, '_1' , '1', 'D', 'I', 'V', 'X', src_fps, get_width_mat(det_img1), get_height_mat(det_img1), 1);
 
         //'H', '2', '6', '4'
         //'D', 'I', 'V', 'X'
@@ -276,8 +299,8 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     {
         int src_fps = 25;
         src_fps = get_stream_fps_cpp_cv(cap2);
-        output_video_writer =
-            create_video_writer(out_filename, '_2', 'D', 'I', 'V', 'X', src_fps, get_width_mat(det_img), get_height_mat(det_img), 1);
+        output_video_writer2 =
+            create_video_writer(out_filename, '_2', 'D', 'I', 'V', 'X', src_fps, get_width_mat(det_img2), get_height_mat(det_img2), 1);
 
         //'H', '2', '6', '4'
         //'D', 'I', 'V', 'X'
@@ -463,7 +486,7 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     //cudaProfilerStop();
 }
 #else
-void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int cam_index, const char *filename, char **names, int classes, int avgframes,
+void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int cam_index1, int cam_index2, const char *filename, char **names, int classes, int avgframes,
     int frame_skip, char *prefix, char *out_filename, int mjpeg_port, int dontdraw_bbox, int json_port, int dont_show, int ext_output, int letter_box_in, int time_limit_sec, char *http_post_host,
     int benchmark, int benchmark_layers)
 {
