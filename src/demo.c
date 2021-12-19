@@ -23,7 +23,8 @@ static char **demo_names;
 static image **demo_alphabet;
 static int demo_classes;
 
-static int nboxes = 0;
+static int nboxes1 = 0;
+static int nboxes2 = 0;
 static detection *dets1 = NULL;
 static detection *dets2 = NULL;
 
@@ -76,7 +77,7 @@ void *fetch_in_thread(void *ptr)
             this_thread_yield();
         }
         int dont_close_stream = 0;    // set 1 if your IP-camera periodically turns off and turns on video-stream
-        if (letter_box)
+        if (cap1 && letter_box)
             in_s1 = get_image_from_stream_letterbox(cap1, net.w, net.h, net.c, &in_img1, dont_close_stream);
         else
             in_s1 = get_image_from_stream_resize(cap1, net.w, net.h, net.c, &in_img1, dont_close_stream);
@@ -88,7 +89,7 @@ void *fetch_in_thread(void *ptr)
             return 0;
         }
 
-        if (letter_box)
+        if (cap2 && letter_box)
             in_s2 = get_image_from_stream_letterbox(cap2, net.w, net.h, net.c, &in_img2, dont_close_stream);
         else
             in_s2 = get_image_from_stream_resize(cap2, net.w, net.h, net.c, &in_img2, dont_close_stream);
@@ -123,25 +124,36 @@ void *detect_in_thread(void *ptr)
         }
 
         layer l = net.layers[net.n - 1];
+
+        // cam1 or video file
         float *X1 = det_s1.data;
-        float *X2 = det_s1.data;
         //float *prediction =
         network_predict(net, X1);
-        network_predict(net, X2);
 
         cv_images1[demo_index1] = det_img1;
-        cv_images2[demo_index2] = det_img2;
         det_img1 = cv_images1[(demo_index1 + avg_frames / 2 + 1) % avg_frames];
-        det_img2 = cv_images2[(demo_index2 + avg_frames / 2 + 1) % avg_frames];
         demo_index1 = (demo_index1 + 1) % avg_frames;
-        demo_index2 = (demo_index2 + 1) % avg_frames;
 
         if (letter_box)
-            dets1 = get_network_boxes(&net, get_width_mat(in_img1), get_height_mat(in_img1), demo_thresh, demo_thresh, 0, 1, &nboxes, 1); // letter box
-            dets2 = get_network_boxes(&net, get_width_mat(in_img2), get_height_mat(in_img2), demo_thresh, demo_thresh, 0, 1, &nboxes, 1); // letter box
+            dets1 = get_network_boxes(&net, get_width_mat(in_img1), get_height_mat(in_img1), demo_thresh, demo_thresh, 0, 1, &nboxes1, 1); // letter box
         else
-            dets1 = get_network_boxes(&net, net.w, net.h, demo_thresh, demo_thresh, 0, 1, &nboxes, 0); // resized
-            dets2 = get_network_boxes(&net, net.w, net.h, demo_thresh, demo_thresh, 0, 1, &nboxes, 0); // resized
+            dets1 = get_network_boxes(&net, net.w, net.h, demo_thresh, demo_thresh, 0, 1, &nboxes1, 0); // resized
+
+        // cam2
+        if (cap2) {
+            float *X2 = det_s1.data;
+            //float *prediction =
+            network_predict(net, X2);
+
+            cv_images2[demo_index2] = det_img2;
+            det_img2 = cv_images2[(demo_index2 + avg_frames / 2 + 1) % avg_frames];
+            demo_index2 = (demo_index2 + 1) % avg_frames;
+
+            if (letter_box)
+                dets2 = get_network_boxes(&net, get_width_mat(in_img2), get_height_mat(in_img2), demo_thresh, demo_thresh, 0, 1, &nboxes2, 1); // letter box
+            else
+                dets2 = get_network_boxes(&net, net.w, net.h, demo_thresh, demo_thresh, 0, 1, &nboxes2, 0); // resized
+        }
 
         //const float nms = .45;
         //if (nms) {
@@ -261,7 +273,8 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     det_s2 = in_s2;
 
     for (j = 0; j < avg_frames / 2; ++j) {
-        free_detections(dets, nboxes);
+        free_detections(dets1, nboxes1);
+        free_detections(dets2, nboxes2);
         fetch_in_thread_sync(0); //fetch_in_thread(0);
         detect_in_thread_sync(0); //fetch_in_thread(0);
         det_img1 = in_img1;
@@ -325,8 +338,10 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
         ++count;
         {
             const float nms = .45;    // 0.4F
-            int local_nboxes = nboxes;
-            detection *local_dets = dets;
+            int local_nboxes1 = nboxes1;
+            int local_nboxes2 = nboxes2;
+            detection *local_dets1 = dets1;
+            detection *local_dets2 = dets2;
             this_thread_yield();
 
             if (!benchmark) custom_atomic_store_int(&run_fetch_in_thread, 1); // if (custom_create_thread(&fetch_thread, 0, fetch_in_thread, 0)) error("Thread creation failed", DARKNET_LOC);
@@ -334,11 +349,15 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
 
             //if (nms) do_nms_obj(local_dets, local_nboxes, l.classes, nms);    // bad results
             if (nms) {
-                if (l.nms_kind == DEFAULT_NMS) do_nms_sort(local_dets, local_nboxes, l.classes, nms);
-                else diounms_sort(local_dets, local_nboxes, l.classes, nms, l.nms_kind, l.beta_nms);
+                if (l.nms_kind == DEFAULT_NMS) do_nms_sort(local_dets1, local_nboxes1, l.classes, nms);
+                else diounms_sort(local_dets1, local_nboxes1, l.classes, nms, l.nms_kind, l.beta_nms);
+                if (cap2) {
+                    if (l.nms_kind == DEFAULT_NMS) do_nms_sort(local_dets2, local_nboxes2, l.classes, nms);
+                    else diounms_sort(local_dets2, local_nboxes2, l.classes, nms, l.nms_kind, l.beta_nms);
+                }
             }
 
-            if (l.embedding_size) set_track_id(local_dets, local_nboxes, demo_thresh, l.sim_thresh, l.track_ciou_norm, l.track_history_size, l.dets_for_track, l.dets_for_show);
+            if (l.embedding_size) set_track_id(local_dets1, local_nboxes1, demo_thresh, l.sim_thresh, l.track_ciou_norm, l.track_history_size, l.dets_for_track, l.dets_for_show);
 
             //printf("\033[2J");
             //printf("\033[1;1H");
@@ -346,26 +365,32 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
             printf("Objects:\n\n");
 
             ++frame_id;
-            if (demo_json_port > 0) {
-                int timeout = 400000;
-                send_json(local_dets, local_nboxes, l.classes, demo_names, frame_id, demo_json_port, timeout);
-            }
+            // if (demo_json_port > 0) {
+            //     int timeout = 400000;
+            //     send_json(local_dets, local_nboxes, l.classes, demo_names, frame_id, demo_json_port, timeout);
+            // }
 
             //char *http_post_server = "webhook.site/898bbd9b-0ddd-49cf-b81d-1f56be98d870";
-            if (http_post_host && !send_http_post_once) {
-                int timeout = 3;            // 3 seconds
-                int http_post_port = 80;    // 443 https, 80 http
-                if (send_http_post_request(http_post_host, http_post_port, filename,
-                    local_dets, nboxes, classes, names, frame_id, ext_output, timeout))
-                {
-                    if (time_limit_sec > 0) send_http_post_once = 1;
-                }
-            }
+            // if (http_post_host && !send_http_post_once) {
+            //     int timeout = 3;            // 3 seconds
+            //     int http_post_port = 80;    // 443 https, 80 http
+            //     if (send_http_post_request(http_post_host, http_post_port, filename,
+            //         local_dets, nboxes, classes, names, frame_id, ext_output, timeout))
+            //     {
+            //         if (time_limit_sec > 0) send_http_post_once = 1;
+            //     }
+            // }
 
-            if (!benchmark && !dontdraw_bbox) draw_detections_cv_v3(show_img, local_dets, local_nboxes, demo_thresh, demo_names, demo_alphabet, demo_classes, demo_ext_output);
-            free_detections(local_dets, local_nboxes);
+            if (!benchmark && !dontdraw_bbox) {
+                draw_detections_cv_v3(show_img1, local_dets1, local_nboxes1, demo_thresh, demo_names, demo_alphabet, demo_classes, demo_ext_output);
+                if (cap2) draw_detections_cv_v3(show_img2, local_dets2, local_nboxes2, demo_thresh, demo_names, demo_alphabet, demo_classes, demo_ext_output);
+            }
+            free_detections(local_dets1, local_nboxes1);
+            if (cap2) free_detections(local_dets2, local_nboxes2);
 
             printf("\nFPS:%.1f \t AVG_FPS:%.1f\n", fps, avg_fps);
+
+            // TODO: ~21.12.19, l shoud be seperated?
 
             if(!prefix){
                 if (!dont_show) {
