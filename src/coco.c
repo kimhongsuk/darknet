@@ -389,7 +389,8 @@ void test_coco(char *cfgfile, char *weightfile, char *filename, float thresh)
 void run_coco(int argc, char **argv)
 {
 	int dont_show = find_arg(argc, argv, "-dont_show");
-	int mjpeg_port = find_int_arg(argc, argv, "-mjpeg_port", -1);
+	int mjpeg_port1 = find_int_arg(argc, argv, "-mjpeg_port1", -1);
+    int mjpeg_port2 = find_int_arg(argc, argv, "-mjpeg_port2", -1);
     int json_port = find_int_arg(argc, argv, "-json_port", -1);
 	char *out_filename = find_char_arg(argc, argv, "-out_filename", 0);
     char *prefix = find_char_arg(argc, argv, "-prefix", 0);
@@ -414,5 +415,5 @@ void run_coco(int argc, char **argv)
     else if(0==strcmp(argv[2], "valid")) validate_coco(cfg, weights);
     else if(0==strcmp(argv[2], "recall")) validate_coco_recall(cfg, weights);
     else if(0==strcmp(argv[2], "demo")) demo(cfg, weights, thresh, hier_thresh, cam_index1, cam_index2, filename1, filename2, coco_classes, 80, 1, frame_skip,
-		prefix, out_filename, mjpeg_port, 0, json_port, dont_show, ext_output, 0, 0, 0, 0, 0);
+		prefix, out_filename, mjpeg_port1, mjpeg_port2, 0, json_port, dont_show, ext_output, 0, 0, 0, 0, 0);
 }

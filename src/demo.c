@@ -184,7 +184,7 @@ double get_wall_time()
 }
 
 void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int cam_index1, int cam_index2, const char *filename1, const char *filename2, char **names, int classes, int avgframes,
-    int frame_skip, char *prefix, char *out_filename, int mjpeg_port, int dontdraw_bbox, int json_port, int dont_show, int ext_output, int letter_box_in, int time_limit_sec, char *http_post_host,
+    int frame_skip, char *prefix, char *out_filename, int mjpeg_port1, int mjpeg_port2, int dontdraw_bbox, int json_port, int dont_show, int ext_output, int letter_box_in, int time_limit_sec, char *http_post_host,
     int benchmark, int benchmark_layers)
 {
     if (avgframes < 1) avgframes = 1;
@@ -215,25 +215,28 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     if(filename1){
         printf("First ideo file: %s\n", filename1);
         cap1 = get_capture_video_stream(filename1);
-        cap2 = get_capture_video_stream(filename2);
         demo_skip_frame1 = is_live_stream(filename1);
-        demo_skip_frame2 = is_live_stream(filename2);
+        if (filename2) {
+            printf("First ideo file: %s\n", filename2);
+            cap2 = get_capture_video_stream(filename2);
+            demo_skip_frame2 = is_live_stream(filename2);
+        }
     }else{
         printf("First webcam index: %d\n", cam_index1);
-        printf("Second webcam index: %d\n", cam_index1);
         cap1 = get_capture_webcam(cam_index1);
-        cap2 = get_capture_webcam(cam_index2);
         demo_skip_frame1 = true;
-        demo_skip_frame2 = true;
+        if (cam_index2) {
+            printf("Second webcam index: %d\n", cam_index1);
+            cap2 = get_capture_webcam(cam_index2);
+            demo_skip_frame2 = true;
+        }
     }
 
-    if (!cap1) {
+    if (!cap1 || (!cap2 && (filename2 || cam_index2))) {
 #ifdef WIN32
         printf("Check that you have copied file opencv_ffmpeg340_64.dll to the same directory where is darknet.exe \n");
 #endif
-        error("Couldn't connect to webcam1", DARKNET_LOC);
-    } if (!cap2) {
-        error("Couldn't connect to webcam2", DARKNET_LOC);
+        error("Couldn't connect to webcam", DARKNET_LOC);
     }
 
     layer l = net.layers[net.n-1];
@@ -265,26 +268,33 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
 
     fetch_in_thread_sync(0); //fetch_in_thread(0);
     det_img1 = in_img1;
-    det_img2 = in_img2;
     det_s1 = in_s1;
-    det_s2 = in_s2;
+    if (cap2) {
+        det_img2 = in_img2;
+        det_s2 = in_s2;
+    }
 
     fetch_in_thread_sync(0); //fetch_in_thread(0);
     detect_in_thread_sync(0); //fetch_in_thread(0);
     det_img1 = in_img1;
-    det_img2 = in_img2;
     det_s1 = in_s1;
-    det_s2 = in_s2;
+    if (cap2) {
+        det_img2 = in_img2;
+        det_s2 = in_s2;
+    }
 
     for (j = 0; j < avg_frames / 2; ++j) {
         free_detections(dets1, nboxes1);
-        free_detections(dets2, nboxes2);
+        if (cap2) free_detections(dets2, nboxes2);
+
         fetch_in_thread_sync(0); //fetch_in_thread(0);
         detect_in_thread_sync(0); //fetch_in_thread(0);
         det_img1 = in_img1;
-        det_img2 = in_img2;
         det_s1 = in_s1;
-        det_s2 = in_s2;
+        if (cap2) {
+            det_img2 = in_img2;
+            det_s2 = in_s2;
+        }
     }
 
     int count = 0;
@@ -343,9 +353,11 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
         {
             const float nms = .45;    // 0.4F
             int local_nboxes1 = nboxes1;
-            int local_nboxes2 = nboxes2;
             detection *local_dets1 = dets1;
-            detection *local_dets2 = dets2;
+            if (cap2) {
+                int local_nboxes2 = nboxes2;
+                detection *local_dets2 = dets2;
+            }
             this_thread_yield();
 
             if (!benchmark) custom_atomic_store_int(&run_fetch_in_thread, 1); // if (custom_create_thread(&fetch_thread, 0, fetch_in_thread, 0)) error("Thread creation failed", DARKNET_LOC);
@@ -361,20 +373,23 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
                 }
             }
 
-            if (l.embedding_size) set_track_id(local_dets1, local_nboxes1, demo_thresh, l.sim_thresh, l.track_ciou_norm, l.track_history_size, l.dets_for_track, l.dets_for_show);
+            if (l.embedding_size) {
+                set_track_id(local_dets1, local_nboxes1, demo_thresh, l.sim_thresh, l.track_ciou_norm, l.track_history_size, l.dets_for_track, l.dets_for_show);
+                if (cap2) set_track_id(local_dets2, local_nboxes2, demo_thresh, l.sim_thresh, l.track_ciou_norm, l.track_history_size, l.dets_for_track, l.dets_for_show);
+            }
 
             //printf("\033[2J");
             //printf("\033[1;1H");
             //printf("\nFPS:%.1f\n", fps);
             printf("Objects:\n\n");
 
-            ++frame_id;
+            // ++frame_id;
             // if (demo_json_port > 0) {
             //     int timeout = 400000;
             //     send_json(local_dets, local_nboxes, l.classes, demo_names, frame_id, demo_json_port, timeout);
             // }
 
-            //char *http_post_server = "webhook.site/898bbd9b-0ddd-49cf-b81d-1f56be98d870";
+            // //char *http_post_server = "webhook.site/898bbd9b-0ddd-49cf-b81d-1f56be98d870";
             // if (http_post_host && !send_http_post_once) {
             //     int timeout = 3;            // 3 seconds
             //     int http_post_port = 80;    // 443 https, 80 http
@@ -398,38 +413,63 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
 
             if(!prefix){
                 if (!dont_show) {
+                    int key = -1;
                     const int each_frame = max_val_cmp(1, avg_fps / 60);
-                    if(global_frame_counter % each_frame == 0) show_image_mat(show_img, "Demo");
+                    if(global_frame_counter % each_frame == 0) show_image_mat(show_img1, "Demo1");
                     int c = wait_key_cv(1);
-                    if (c == 10) {
+                    if (c != -1) key = c;
+                    if (cap2) {
+                        if(global_frame_counter % each_frame == 0) show_image_mat(show_img2, "Demo2");
+                        int c = wait_key_cv(1);
+                        if (c != -1) key = c;
+                    }
+                    if (key == 10) {
                         if (frame_skip == 0) frame_skip = 60;
                         else if (frame_skip == 4) frame_skip = 0;
                         else if (frame_skip == 60) frame_skip = 4;
                         else frame_skip = 0;
                     }
-                    else if (c == 27 || c == 1048603) // ESC - exit (OpenCV 2.x / 3.x)
+                    else if (key == 27 || key == 1048603) // ESC - exit (OpenCV 2.x / 3.x)
                     {
                         flag_exit = 1;
                     }
                 }
             }else{
                 char buff[256];
-                sprintf(buff, "%s_%08d.jpg", prefix, count);
-                if(show_img) save_cv_jpg(show_img, buff);
+                sprintf(buff, "%s_%08d_1.jpg", prefix, count);
+                if(show_img1) save_cv_jpg(show_img1, buff);
+
+                if (cap2) {
+                    char buff2[256];
+                    sprintf(buff2, "%s_%08d_2.jpg", prefix, count);
+                    if(show_img2) save_cv_jpg(show_img2, buff2);
+                }
             }
 
             // if you run it with param -mjpeg_port 8090  then open URL in your web-browser: http://localhost:8090
-            if (mjpeg_port > 0 && show_img) {
-                int port = mjpeg_port;
+            if (mjpeg_port1 > 0 && show_img1) {
+                int port = mjpeg_port1;
                 int timeout = 400000;
                 int jpeg_quality = 40;    // 1 - 100
-                send_mjpeg(show_img, port, timeout, jpeg_quality);
+                send_mjpeg(show_img1, port, timeout, jpeg_quality);
+            }
+
+            if (mjpeg_port2 > 0 && show_img2) {
+                int port = mjpeg_port2;
+                int timeout = 400000;
+                int jpeg_quality = 40;    // 1 - 100
+                send_mjpeg(show_img2, port, timeout, jpeg_quality);
             }
 
             // save video file
-            if (output_video_writer && show_img) {
-                write_frame_cv(output_video_writer, show_img);
-                printf("\n cvWriteFrame \n");
+            if (output_video_writer1 && show_img1) {
+                write_frame_cv(output_video_writer1, show_img1);
+                printf("\n cvWriteFrame1 \n");
+            }
+
+            if (output_video_writer2 && show_img2) {
+                write_frame_cv(output_video_writer2, show_img2);
+                printf("\n cvWriteFrame2 \n");
             }
 
             while (custom_atomic_load_int(&run_detect_in_thread)) {
@@ -441,7 +481,10 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
                     if (avg_fps > 180) this_thread_yield();
                     else this_thread_sleep_for(thread_wait_ms);   // custom_join(fetch_thread, 0);
                 }
-                free_image(det_s);
+                free_image(det_s1);
+                if (cap2) {
+                    free_image(det_s2);
+                }
             }
 
             if (time_limit_sec > 0 && (get_time_point() - start_time_lim)/1000000 > time_limit_sec) {
@@ -452,11 +495,19 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
             if (flag_exit == 1) break;
 
             if(delay == 0){
-                if(!benchmark) release_mat(&show_img);
-                show_img = det_img;
+                if(!benchmark) release_mat(&show_img1);
+                show_img1 = det_img1;
+                if (cap2) {
+                    if(!benchmark) release_mat(&show_img2);
+                    show_img2 = det_img2;
+                }
             }
-            det_img = in_img;
-            det_s = in_s;
+            det_img1 = in_img1;
+            det_s1 = in_s1;
+            if (cap2) {
+                det_img2 = in_img2;
+                det_s2 = in_s2;
+            }
         }
         --delay;
         if(delay < 0){
@@ -470,6 +521,9 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
             before = after;
 
             float spent_time = (get_time_point() - start_time) / 1000000;
+            if (cap1 && cap2) {
+                spent_time = spent_time / 2;
+            }
             frame_counter++;
             global_frame_counter++;
             if (spent_time >= 3.0f) {
@@ -481,9 +535,13 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
         }
     }
     printf("input video stream closed. \n");
-    if (output_video_writer) {
-        release_video_writer(&output_video_writer);
-        printf("output_video_writer closed. \n");
+    if (output_video_writer1) {
+        release_video_writer(&output_video_writer1);
+        printf("output_video_writer1 closed. \n");
+    }
+    if (output_video_writer2) {
+        release_video_writer(&output_video_writer2);
+        printf("output_video_writer2 closed. \n");
     }
 
     this_thread_sleep_for(thread_wait_ms);
@@ -492,14 +550,25 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     custom_join(fetch_thread, 0);
 
     // free memory
-    free_image(in_s);
-    free_detections(dets, nboxes);
+    free_image(in_s1);
+    free_detections(dets1, nboxes1);
+    if (cap2) {
+        free_image(in_s2);
+        free_detections(dets2, nboxes2);
+    }
 
     demo_index = (avg_frames + demo_index - 1) % avg_frames;
     for (j = 0; j < avg_frames; ++j) {
-            release_mat(&cv_images[j]);
+        release_mat(&cv_images1[j]);
     }
-    free(cv_images);
+    free(cv_images1);
+
+    if (cap2) {
+        for (j = 0; j < avg_frames; ++j) {
+            release_mat(&cv_images2[j]);
+        }
+        free(cv_images2);
+    }
 
     free_ptrs((void **)names, net.layers[net.n - 1].classes);
 
@@ -516,7 +585,7 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
 }
 #else
 void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int cam_index1, int cam_index2, const char *filename1, const char *filename2, char **names, int classes, int avgframes,
-    int frame_skip, char *prefix, char *out_filename, int mjpeg_port, int dontdraw_bbox, int json_port, int dont_show, int ext_output, int letter_box_in, int time_limit_sec, char *http_post_host,
+    int frame_skip, char *prefix, char *out_filename, int mjpeg_port1, int mjpeg_port2, int dontdraw_bbox, int json_port, int dont_show, int ext_output, int letter_box_in, int time_limit_sec, char *http_post_host,
     int benchmark, int benchmark_layers)
 {
     fprintf(stderr, "Demo needs OpenCV for webcam images.\n");
