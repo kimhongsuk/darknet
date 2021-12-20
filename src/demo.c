@@ -183,7 +183,7 @@ double get_wall_time()
     return (double)walltime.tv_sec + (double)walltime.tv_usec * .000001;
 }
 
-void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int cam_index1, int cam_index2, const char *filename, char **names, int classes, int avgframes,
+void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int cam_index1, int cam_index2, const char *filename1, const char *filename2, char **names, int classes, int avgframes,
     int frame_skip, char *prefix, char *out_filename, int mjpeg_port, int dontdraw_bbox, int json_port, int dont_show, int ext_output, int letter_box_in, int time_limit_sec, char *http_post_host,
     int benchmark, int benchmark_layers)
 {
@@ -212,14 +212,18 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     calculate_binary_weights(net);
     srand(2222222);
 
-    if(filename){
-        printf("video file: %s\n", filename);
-        cap1 = get_capture_video_stream(filename);
-        demo_skip_frame1 = is_live_stream(filename);
-    }else{             
-        printf("Webcam index: %d\n", cam_index1);
+    if(filename1){
+        printf("First ideo file: %s\n", filename1);
+        cap1 = get_capture_video_stream(filename1);
+        cap2 = get_capture_video_stream(filename2);
+        demo_skip_frame1 = is_live_stream(filename1);
+        demo_skip_frame2 = is_live_stream(filename2);
+    }else{
+        printf("First webcam index: %d\n", cam_index1);
+        printf("Second webcam index: %d\n", cam_index1);
         cap1 = get_capture_webcam(cam_index1);
         cap2 = get_capture_webcam(cam_index2);
+        demo_skip_frame1 = true;
         demo_skip_frame2 = true;
     }
 
@@ -511,7 +515,7 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     //cudaProfilerStop();
 }
 #else
-void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int cam_index1, int cam_index2, const char *filename, char **names, int classes, int avgframes,
+void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int cam_index1, int cam_index2, const char *filename1, const char *filename2, char **names, int classes, int avgframes,
     int frame_skip, char *prefix, char *out_filename, int mjpeg_port, int dontdraw_bbox, int json_port, int dont_show, int ext_output, int letter_box_in, int time_limit_sec, char *http_post_host,
     int benchmark, int benchmark_layers)
 {
