@@ -5,8 +5,9 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int cam_index1, int cam_index2, const char *filename1, const char *filename2, char **names, int classes, int avgframes,
-    int frame_skip, char *prefix, char *out_filename, int mjpeg_port1, int mjpeg_port2, int dontdraw_bbox, int json_port, int dont_show, int ext_output, int letter_box_in, int time_limit_sec, char *http_post_host, int benchmark, int benchmark_layers);
+void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int cam_index1, const char *filename1, char **names, int classes, int avgframes,
+    int frame_skip, char *prefix, char *out_filename1, int mjpeg_port1, int dontdraw_bbox, int json_port, int dont_show, int ext_output, int letter_box_in, int time_limit_sec,
+    char *http_post_host, int benchmark, int benchmark_layers, int cam_index2, const char *filename2, char *out_filename2, int mjpeg_port2);
 #ifdef __cplusplus
 }
 #endif

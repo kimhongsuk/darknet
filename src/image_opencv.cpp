@@ -501,15 +501,14 @@ extern "C" void show_image_mat(mat_cv *mat_ptr, const char *name)
 // ====================================================================
 // Video Writer
 // ====================================================================
-extern "C" write_cv *create_video_writer(char *out_filename, char c0, char c1, char c2, char c3, char c4, int fps, int width, int height, int is_color)
+extern "C" write_cv *create_video_writer(char *out_filename, char c1, char c2, char c3, char c4, int fps, int width, int height, int is_color)
 {
     try {
-    std::strcat (out_filename, c0);
     cv::VideoWriter * output_video_writer =
 #ifdef CV_VERSION_EPOCH
-        new cv::VideoWriter(out_filename + c0, CV_FOURCC(c1, c2, c3, c4), fps, cv::Size(width, height), is_color);
+        new cv::VideoWriter(out_filename, CV_FOURCC(c1, c2, c3, c4), fps, cv::Size(width, height), is_color);
 #else
-        new cv::VideoWriter(out_filename + c0, cv::VideoWriter::fourcc(c1, c2, c3, c4), fps, cv::Size(width, height), is_color);
+        new cv::VideoWriter(out_filename, cv::VideoWriter::fourcc(c1, c2, c3, c4), fps, cv::Size(width, height), is_color);
 #endif
 
     return (write_cv *)output_video_writer;

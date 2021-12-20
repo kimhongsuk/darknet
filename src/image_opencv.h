@@ -58,7 +58,7 @@ void show_image_cv(image p, const char *name);
 void show_image_mat(mat_cv *mat_ptr, const char *name);
 
 // Video Writer
-write_cv *create_video_writer(char *out_filename, char c0, char c1, char c2, char c3, char c4, int fps, int width, int height, int is_color);
+write_cv *create_video_writer(char *out_filename, char c1, char c2, char c3, char c4, int fps, int width, int height, int is_color);
 void write_frame_cv(write_cv *output_video_writer, mat_cv *mat);
 void release_video_writer(write_cv **output_video_writer);
 
