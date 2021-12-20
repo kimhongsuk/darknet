@@ -269,7 +269,6 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     custom_thread_t detect_thread = NULL;
     if (custom_create_thread(&fetch_thread, 0, fetch_in_thread, 0)) error("Thread creation failed", DARKNET_LOC);
     if (custom_create_thread(&detect_thread, 0, detect_in_thread, 0)) error("Thread creation failed", DARKNET_LOC);
-    printf("checkpoint 0\n");
 
     fetch_in_thread_sync(0); //fetch_in_thread(0);
     det_img1 = in_img1;
@@ -278,7 +277,6 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
         det_img2 = in_img2;
         det_s2 = in_s2;
     }
-    printf("checkpoint 1\n");
 
     fetch_in_thread_sync(0); //fetch_in_thread(0);
     detect_in_thread_sync(0); //fetch_in_thread(0);
@@ -288,7 +286,6 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
         det_img2 = in_img2;
         det_s2 = in_s2;
     }
-    printf("checkpoint 2\n");
 
     for (j = 0; j < avg_frames / 2; ++j) {
         free_detections(dets1, nboxes1);
@@ -303,8 +300,6 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
             det_s2 = in_s2;
         }
     }
-
-    printf("checkpoint 0\n");
 
     int count = 0;
     if(!prefix && !dont_show){
@@ -556,10 +551,8 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     }
 
     this_thread_sleep_for(thread_wait_ms);
-
     custom_join(detect_thread, 0);
     custom_join(fetch_thread, 0);
-
     // free memory
     free_image(in_s1);
     free_detections(dets1, nboxes1);
