@@ -527,9 +527,6 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
             before = after;
 
             float spent_time = (get_time_point() - start_time) / 1000000;
-            if (cap1 && cap2) {
-                spent_time = spent_time / 2;
-            }
             frame_counter++;
             global_frame_counter++;
             if (spent_time >= 3.0f) {
